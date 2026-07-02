@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>短剧标签播放量与收藏量关系气泡图</title>
+  <style>
+    :root {
+      --bg: #dfe5ff;
+      --panel: rgba(255, 255, 255, 0.68);
+      --ink: #272a42;
+      --muted: #626985;
+      --axis: #6d748f;
+      --grid: rgba(91, 101, 138, 0.24);
+      --grid-strong: rgba(91, 101, 138, 0.42);
+      --purple: #6d47c9;
+      --magenta: #c34f9c;
+      --gold: #e6cf41;
+      --orange: #f29f59;
+      --blue: #444bb7;
+      --shadow: 0 18px 46px rgba(61, 67, 112, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      background: transparent;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+    }
+
+    main {
+      width: 100%;
+      height: 100%;
+      margin: 0 auto;
+      padding: 0;
+    }
+
+    .shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 620px;
+      border: 1px solid rgba(73, 80, 119, 0.22);
+      background: rgba(238, 242, 255, 0.74);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 14px 16px 0;
+    }
+
+    .title h1 {
+      margin: 0;
+      color: #20243a;
+      font-size: clamp(18px, 2vw, 28px);
+      line-height: 1.12;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .title p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(210px, 280px) auto auto;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid rgba(86, 94, 140, 0.22);
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .control input[type="search"] {
+      width: 100%;
+      min-width: 160px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .control input[type="range"] {
+      width: 126px;
+      accent-color: var(--purple);
+    }
+
+    .control input[type="checkbox"] {
+      accent-color: var(--purple);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+    }
+
+    .tab {
+      border: 1px solid rgba(86, 94, 140, 0.22);
+      background: rgba(255, 255, 255, 0.38);
+      color: #40476a;
+      padding: 7px 10px;
+      font: inherit;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+    }
+
+    .tab.is-active {
+      background: rgba(78, 64, 187, 0.14);
+      border-color: rgba(78, 64, 187, 0.38);
+      color: #332c94;
+      font-weight: 700;
+    }
+
+    .chart-wrap {
+      position: relative;
+      padding: 0 12px 8px;
+      overflow: visible;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    .plot-bg {
+      fill: rgba(255, 255, 255, 0.42);
+      stroke: rgba(74, 80, 120, 0.46);
+      stroke-width: 1.3;
+    }
+
+    .grid-line {
+      stroke: var(--grid);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .grid-line.major {
+      stroke: var(--grid-strong);
+      stroke-width: 1.2;
+    }
+
+    .axis-label,
+    .tick-label {
+      fill: #5b617d;
+      font-size: 13px;
+    }
+
+    .axis-title {
+      fill: #30354e;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .bubble {
+      cursor: pointer;
+      stroke: rgba(255, 255, 255, 0.76);
+      stroke-width: 1.2;
+      vector-effect: non-scaling-stroke;
+      opacity: 0.82;
+      transition: opacity 150ms ease, stroke-width 150ms ease, filter 150ms ease;
+    }
+
+    .bubble.is-muted {
+      opacity: 0.11;
+    }
+
+    .bubble.is-active {
+      opacity: 1;
+      stroke-width: 2.4;
+      filter: drop-shadow(0 7px 12px rgba(54, 43, 113, 0.28));
+    }
+
+    .bubble-label {
+      fill: #5d39b0;
+      paint-order: stroke;
+      stroke: rgba(236, 240, 255, 0.9);
+      stroke-width: 4;
+      stroke-linejoin: round;
+      font-size: 13px;
+      font-weight: 700;
+      pointer-events: none;
+      transition: opacity 150ms ease;
+    }
+
+    .bubble-label.is-muted {
+      opacity: 0.12;
+    }
+
+    .bubble-label.is-hidden {
+      opacity: 0;
+    }
+
+    .focus-line {
+      stroke: rgba(46, 61, 126, 0.42);
+      stroke-width: 1;
+      stroke-dasharray: 4 4;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .focus-line.is-visible {
+      opacity: 1;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+      padding: 0 16px 12px 80px;
+      color: #4c526d;
+    }
+
+    .color-legend,
+    .size-legend {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 52px;
+    }
+
+    .color-strip {
+      width: 180px;
+      height: 18px;
+      background: linear-gradient(90deg, #4541bd, #7d43c7, #cc5d9b, #f3a95c, #d9de39);
+      border: 1px solid rgba(65, 70, 112, 0.22);
+    }
+
+    .legend-title {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .legend-note {
+      color: #68708e;
+      font-size: 12px;
+    }
+
+    .size-dot {
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(46, 46, 60, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      color: #34394f;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+    }
+
+    .tooltip {
+      position: absolute;
+      z-index: 10;
+      min-width: 260px;
+      padding: 14px 15px;
+      border: 1px solid rgba(67, 71, 110, 0.2);
+      background: rgba(255, 255, 255, 0.94);
+      color: var(--ink);
+      box-shadow: 0 16px 38px rgba(50, 54, 96, 0.22);
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, calc(-100% - 18px));
+      transition: opacity 120ms ease;
+    }
+
+    .tooltip.is-visible {
+      opacity: 1;
+    }
+
+    .tooltip::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -8px;
+      width: 14px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.94);
+      border-right: 1px solid rgba(67, 71, 110, 0.2);
+      border-bottom: 1px solid rgba(67, 71, 110, 0.2);
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .tooltip h2 {
+      margin: 0 0 8px;
+      color: #352c95;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-top: 5px;
+      color: #555b75;
+      font-size: 14px;
+    }
+
+    .tooltip-row strong {
+      color: #252941;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 960px) {
+      main {
+        padding: 0;
+        width: 100%;
+      }
+
+      .header {
+        display: block;
+        padding: 18px 16px 0;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+        margin-top: 14px;
+      }
+
+      .tabs {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .legend {
+        grid-template-columns: 1fr;
+        padding-left: 22px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .axis-label,
+      .tick-label,
+      .bubble-label {
+        font-size: 11px;
+      }
+
+      .title h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="shell">
+      <header class="header">
+        <div class="title">
+          <h1>标签的播放量与收藏量关系</h1>
+          <p>气泡大小和颜色表示该标签下的剧目数量；横纵轴均为对数尺度。</p>
+        </div>
+        <div class="controls" aria-label="图表交互控件">
+          <label class="control">
+            搜索
+            <input id="searchInput" type="search" placeholder="输入英文标签..." />
+          </label>
+          <label class="control">
+            最小剧目数
+            <input id="countRange" type="range" min="5" max="614" value="5" step="1" />
+            <strong id="countValue">5</strong>
+          </label>
+          <label class="control">
+            <input id="labelToggle" type="checkbox" checked />
+            显示标签
+          </label>
+          <div class="tabs">
+            <button class="tab is-active" data-mode="all" type="button">全部</button>
+            <button class="tab" data-mode="popular" type="button">高播放</button>
+            <button class="tab" data-mode="saved" type="button">高收藏</button>
+            <button class="tab" data-mode="large" type="button">高剧目数</button>
+            <button class="tab" data-mode="niche" type="button">小众高效</button>
+          </div>
+        </div>
+      </header>
+      <div class="chart-wrap">
+        <svg id="chart" viewBox="0 0 1360 850" role="img" aria-labelledby="chartTitle chartDesc">
+          <title id="chartTitle">短剧标签播放量与收藏量关系气泡图</title>
+          <desc id="chartDesc">横轴为平均播放量，纵轴为平均收藏量，气泡大小和颜色为剧目数量。</desc>
+        </svg>
+        <div id="tooltip" class="tooltip" role="status" aria-live="polite"></div>
+      </div>
+      <footer class="legend">
+        <div class="color-legend">
+          <div>
+            <div class="legend-title">剧目数量</div>
+            <div class="legend-note">颜色越偏黄，剧目数量越多</div>
+          </div>
+          <div class="color-strip" aria-hidden="true"></div>
+          <span>少</span>
+          <span>多</span>
+        </div>
+        <div class="size-legend" aria-hidden="true">
+          <div>
+            <div class="legend-title">气泡大小</div>
+            <div class="legend-note">同样表示剧目数量</div>
+          </div>
+          <span class="size-dot" style="width:22px;height:22px;"></span><span>100</span>
+          <span class="size-dot" style="width:34px;height:34px;"></span><span>300</span>
+          <span class="size-dot" style="width:46px;height:46px;"></span><span>600</span>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const rawData = [
+      ["Hidden Identity", 614, 11158359.28, 112770.8469],
+      ["Revenge", 468, 6502161.752, 90957.05128],
+      ["Secret", 334, 9431311.677, 115081.4371],
+      ["Reunion", 282, 5951287.234, 52871.63121],
+      ["Love Triangle", 266, 9073654.887, 95772.55639],
+      ["Self-Growth", 218, 2683988.532, 37990.82569],
+      ["Mistaken Identity", 215, 9587260.465, 94783.72093],
+      ["Hidden Feelings", 214, 6777035.981, 65679.90654],
+      ["Genius Babies", 194, 1696592.784, 20036.59794],
+      ["Karma", 194, 1695249.485, 20032.98969],
+      ["Love After Marriage", 192, 11192440.63, 81738.54167],
+      ["All-Too-Late", 176, 4505779.545, 53061.36364],
+      ["Flash Marriage", 174, 10034929.31, 77971.26437],
+      ["Redemption", 166, 6945540.361, 82724.6988],
+      ["Contract Lovers", 164, 12381523.78, 108821.9512],
+      ["Pregnancy", 158, 13616596.2, 122584.1772],
+      ["Lost Child", 130, 6184186.923, 70995.38462],
+      ["Affair", 126, 5872028.571, 70506.34921],
+      ["Business", 124, 10226195.97, 90911.29032],
+      ["Rebirth", 116, 1308306.034, 14278.44828],
+      ["Love-Hate", 104, 3119350, 40395.19231],
+      ["Campus Lovers", 98, 35564267.35, 382689.7959],
+      ["First Love", 96, 10771815.63, 113857.2917],
+      ["Office Romance", 94, 7998102.128, 68820.21277],
+      ["Enemies To Lovers", 84, 17481672.62, 195221.4286],
+      ["Friends To Lovers", 74, 3393840.541, 38321.62162],
+      ["Super Power", 72, 3983187.5, 34381.94444],
+      ["Time Travel", 72, 827990.2778, 13222.22222],
+      ["Love After Divorce", 66, 15824748.48, 147307.5758],
+      ["Morals & Ethics", 58, 1112101.724, 18274.13793],
+      ["Age Gap", 57, 31143926.32, 317538.5965],
+      ["Reincarnation", 56, 1131648.214, 14769.64286],
+      ["Group Favorite", 40, 1176225, 12840],
+      ["Fake Relationship", 38, 13061286.84, 130613.1579],
+      ["Friendship", 26, 751438.4615, 14600],
+      ["Step-Siblings", 26, 1003173.077, 12219.23077],
+      ["Surrogate Bride", 20, 24619705, 192395],
+      ["Neighbors", 18, 438622.2222, 9555.555556],
+      ["Blind Date", 14, 1224828.571, 10257.14286],
+      ["Adventure", 10, 5418420, 79780],
+      ["Multiple Identities", 10, 2379210, 31250],
+      ["Fake Pregnancy", 9, 20956100, 389088.8889],
+      ["Fated Lovers", 9, 2272922.222, 32100],
+      ["Reverse Harem", 9, 11453333.33, 134733.3333],
+      ["Harem", 8, 2356837.5, 32112.5],
+      ["The Chosen One", 8, 1280625, 25737.5],
+      ["Playing Dumb", 5, 1281180, 18720]
+    ];
+
+    const data = rawData.map(([label, count, views, saves]) => ({ label, count, views, saves }));
+    const svg = document.querySelector("#chart");
+    const tooltip = document.querySelector("#tooltip");
+    const searchInput = document.querySelector("#searchInput");
+    const countRange = document.querySelector("#countRange");
+    const countValue = document.querySelector("#countValue");
+    const labelToggle = document.querySelector("#labelToggle");
+    const tabs = [...document.querySelectorAll(".tab")];
+    const ns = "http://www.w3.org/2000/svg";
+
+    const W = 1360;
+    const H = 850;
+    const margin = { top: 42, right: 56, bottom: 92, left: 112 };
+    const plot = {
+      x: margin.left,
+      y: margin.top,
+      w: W - margin.left - margin.right,
+      h: H - margin.top - margin.bottom
+    };
+
+    const xMin = 3e5;
+    const xMax = 5e7;
+    const yMin = 8e3;
+    const yMax = 5e5;
+    const countMin = Math.min(...data.map(d => d.count));
+    const countMax = Math.max(...data.map(d => d.count));
+    const xTicks = [3.16228e5, 1e6, 3.162278e6, 1e7, 3.1622777e7];
+    const yTicks = [1e4, 3.1623e4, 1e5, 3.16228e5];
+    let mode = "all";
+    let activeLabel = null;
+
+    const log = value => Math.log10(value);
+    const scaleLog = (value, min, max, rangeMin, rangeMax) => {
+      const t = (log(value) - log(min)) / (log(max) - log(min));
+      return rangeMin + t * (rangeMax - rangeMin);
+    };
+    const xScale = value => scaleLog(value, xMin, xMax, plot.x, plot.x + plot.w);
+    const yScale = value => scaleLog(value, yMin, yMax, plot.y + plot.h, plot.y);
+    const radiusScale = count => 5 + Math.sqrt((count - countMin) / (countMax - countMin)) * 24;
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const formatNumber = value => Math.round(value).toLocaleString("en-US");
+
+    const palette = [
+      [68, 65, 189],
+      [125, 67, 199],
+      [204, 93, 155],
+      [243, 169, 92],
+      [217, 222, 57]
+    ];
+
+    function colorFor(count) {
+      const t = (count - countMin) / (countMax - countMin);
+      const p = t * (palette.length - 1);
+      const i = Math.floor(p);
+      const f = p - i;
+      const a = palette[i];
+      const b = palette[Math.min(i + 1, palette.length - 1)];
+      return `rgb(${Math.round(lerp(a[0], b[0], f))}, ${Math.round(lerp(a[1], b[1], f))}, ${Math.round(lerp(a[2], b[2], f))})`;
+    }
+
+    function el(name, attrs = {}, parent = svg, text = "") {
+      const node = document.createElementNS(ns, name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text) node.textContent = text;
+      parent.appendChild(node);
+      return node;
+    }
+
+    const gridLayer = el("g", { class: "grid-layer" });
+    const bubbleLayer = el("g", { class: "bubble-layer" });
+    const labelLayer = el("g", { class: "label-layer" });
+    const focusLayer = el("g", { class: "focus-layer" });
+    const focusX = el("line", { class: "focus-line" }, focusLayer);
+    const focusY = el("line", { class: "focus-line" }, focusLayer);
+
+    drawBase();
+    drawBubbles();
+    applyFilters();
+
+    function drawBase() {
+      el("rect", { class: "plot-bg", x: plot.x, y: plot.y, width: plot.w, height: plot.h }, gridLayer);
+
+      xTicks.forEach(tick => {
+        const x = xScale(tick);
+        el("line", { class: "grid-line major", x1: x, y1: plot.y, x2: x, y2: plot.y + plot.h }, gridLayer);
+        el("text", { class: "tick-label", x, y: plot.y + plot.h + 28, "text-anchor": "middle" }, gridLayer, formatNumber(tick));
+      });
+
+      yTicks.forEach(tick => {
+        const y = yScale(tick);
+        el("line", { class: "grid-line major", x1: plot.x, y1: y, x2: plot.x + plot.w, y2: y }, gridLayer);
+        el("text", { class: "tick-label", x: plot.x - 12, y: y + 5, "text-anchor": "end" }, gridLayer, formatNumber(tick));
+      });
+
+      for (let power = 5; power <= 7; power += 1) {
+        for (let m = 2; m < 10; m += 1) {
+          const value = m * Math.pow(10, power);
+          if (value > xMin && value < xMax) {
+            const x = xScale(value);
+            el("line", { class: "grid-line", x1: x, y1: plot.y, x2: x, y2: plot.y + plot.h }, gridLayer);
+          }
+        }
+      }
+
+      for (let power = 4; power <= 5; power += 1) {
+        for (let m = 2; m < 10; m += 1) {
+          const value = m * Math.pow(10, power);
+          if (value > yMin && value < yMax) {
+            const y = yScale(value);
+            el("line", { class: "grid-line", x1: plot.x, y1: y, x2: plot.x + plot.w, y2: y }, gridLayer);
+          }
+        }
+      }
+
+      el("text", { class: "axis-title", x: plot.x + plot.w / 2, y: H - 28, "text-anchor": "middle" }, gridLayer, "平均播放量（对数尺度）");
+      el("text", {
+        class: "axis-title",
+        x: 28,
+        y: plot.y + plot.h / 2,
+        "text-anchor": "middle",
+        transform: `rotate(-90 28 ${plot.y + plot.h / 2})`
+      }, gridLayer, "平均收藏量（对数尺度）");
+    }
+
+    function drawBubbles() {
+      data.forEach((d, i) => {
+        d.x = xScale(d.views);
+        d.y = yScale(d.saves);
+        d.r = radiusScale(d.count);
+        d.efficiency = d.saves / d.count;
+
+        const bubble = el("circle", {
+          class: "bubble",
+          cx: d.x,
+          cy: d.y,
+          r: 0,
+          fill: colorFor(d.count),
+          "data-label": d.label
+        }, bubbleLayer);
+
+        const offset = labelOffset(d, i);
+        const label = el("text", {
+          class: "bubble-label",
+          x: d.x + offset.dx,
+          y: d.y + offset.dy,
+          "text-anchor": offset.anchor,
+          "data-label": d.label
+        }, labelLayer, d.label);
+
+        d.bubble = bubble;
+        d.labelNode = label;
+
+        bubble.animate(
+          [{ r: 0, opacity: 0 }, { r: d.r, opacity: 0.82 }],
+          { duration: 760, delay: i * 18, easing: "cubic-bezier(.2,.72,.22,1)", fill: "forwards" }
+        );
+
+        bubble.addEventListener("pointerenter", event => setActive(d, event));
+        bubble.addEventListener("pointermove", event => setActive(d, event));
+        bubble.addEventListener("pointerleave", () => clearActive());
+        bubble.addEventListener("click", event => {
+          activeLabel = activeLabel === d.label ? null : d.label;
+          setActive(d, event);
+          applyFilters();
+        });
+      });
+    }
+
+    function labelOffset(d, index) {
+      const left = d.x > plot.x + plot.w * 0.78;
+      const high = d.y < plot.y + 80;
+      const low = d.y > plot.y + plot.h - 54;
+      const stagger = (index % 5) - 2;
+      return {
+        dx: left ? -d.r - 7 : d.r + 6,
+        dy: high ? 20 : low ? -10 : 4 + stagger * 2,
+        anchor: left ? "end" : "start"
+      };
+    }
+
+    function matchMode(d) {
+      if (mode === "popular") return d.views >= 1.2e7;
+      if (mode === "saved") return d.saves >= 1.2e5;
+      if (mode === "large") return d.count >= 180;
+      if (mode === "niche") return d.count <= 40 && (d.views >= 1e7 || d.saves >= 1.2e5);
+      return true;
+    }
+
+    function applyFilters() {
+      const query = searchInput.value.trim().toLowerCase();
+      const minCount = Number(countRange.value);
+      countValue.textContent = minCount;
+      const showLabels = labelToggle.checked;
+
+      data.forEach(d => {
+        const matchesSearch = !query || d.label.toLowerCase().includes(query);
+        const visible = d.count >= minCount && matchMode(d);
+        const active = activeLabel ? d.label === activeLabel : matchesSearch && visible;
+        const muted = !active || !visible;
+
+        d.bubble.classList.toggle("is-muted", muted);
+        d.bubble.classList.toggle("is-active", d.label === activeLabel || (query && matchesSearch && visible));
+        d.labelNode.classList.toggle("is-muted", muted);
+        d.labelNode.classList.toggle("is-hidden", !showLabels || (!visible && !query));
+      });
+    }
+
+    function setActive(d, event) {
+      data.forEach(item => {
+        const isActive = item.label === d.label;
+        item.bubble.classList.toggle("is-active", isActive);
+        item.bubble.classList.toggle("is-muted", !isActive);
+        item.labelNode.classList.toggle("is-muted", !isActive);
+      });
+
+      focusX.setAttribute("x1", d.x);
+      focusX.setAttribute("x2", d.x);
+      focusX.setAttribute("y1", plot.y);
+      focusX.setAttribute("y2", plot.y + plot.h);
+      focusY.setAttribute("x1", plot.x);
+      focusY.setAttribute("x2", plot.x + plot.w);
+      focusY.setAttribute("y1", d.y);
+      focusY.setAttribute("y2", d.y);
+      focusX.classList.add("is-visible");
+      focusY.classList.add("is-visible");
+
+      const chartRect = document.querySelector(".chart-wrap").getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const left = svgRect.left + (d.x / W) * svgRect.width - chartRect.left;
+      const top = svgRect.top + (d.y / H) * svgRect.height - chartRect.top;
+      tooltip.style.left = `${clamp(left, 150, chartRect.width - 150)}px`;
+      tooltip.style.top = `${clamp(top, 122, chartRect.height - 20)}px`;
+      tooltip.innerHTML = `
+        <h2>${d.label}</h2>
+        <div class="tooltip-row"><span>剧目数量</span><strong>${formatNumber(d.count)}</strong></div>
+        <div class="tooltip-row"><span>平均播放量</span><strong>${formatNumber(d.views)}</strong></div>
+        <div class="tooltip-row"><span>平均收藏量</span><strong>${formatNumber(d.saves)}</strong></div>
+        <div class="tooltip-row"><span>收藏 / 剧目</span><strong>${formatNumber(d.efficiency)}</strong></div>
+      `;
+      tooltip.classList.add("is-visible");
+    }
+
+    function clearActive() {
+      if (activeLabel) return;
+      tooltip.classList.remove("is-visible");
+      focusX.classList.remove("is-visible");
+      focusY.classList.remove("is-visible");
+      applyFilters();
+    }
+
+    searchInput.addEventListener("input", () => {
+      activeLabel = null;
+      applyFilters();
+    });
+
+    countRange.addEventListener("input", () => {
+      activeLabel = null;
+      applyFilters();
+    });
+
+    labelToggle.addEventListener("change", applyFilters);
+
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(item => item.classList.remove("is-active"));
+        tab.classList.add("is-active");
+        mode = tab.dataset.mode;
+        activeLabel = null;
+        applyFilters();
+      });
+    });
+
+    svg.addEventListener("click", event => {
+      if (event.target === svg || event.target.classList.contains("plot-bg")) {
+        activeLabel = null;
+        tooltip.classList.remove("is-visible");
+        focusX.classList.remove("is-visible");
+        focusY.classList.remove("is-visible");
+        applyFilters();
+      }
+    });
+  </script>
+</body>
+</html>
